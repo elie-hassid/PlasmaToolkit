@@ -5,22 +5,21 @@ from abc import ABC, abstractmethod
 class Reaction:
     """Represents a reaction with fixed formula-based, or BOLOS-computable rate."""
 
-    def __init__(self, reactants, products, rate_expression, description=None, comment=None):
+    def __init__(self, reactants, products, rate_expression, is_superelastic = False):
         """
         reactants, products: list of strings
         rate_expression: either a float (fixed) or a callable(variables) -> float
-        description, comment: optional strings
+        is_superelastic: is used to flag superelastic reactions, which are computed in post-processing.
         """
         self.reactants = reactants
         self.products = products
         self.rate_expression = rate_expression
-        self.description = description
-        self.comment = comment
+        self.is_superelastic = is_superelastic
 
     def __repr__(self):
         return f"Reaction({self.reactants} -> {self.products}, {self.rate_expression})\n"
 
-class KineticModel():
+class KineticModel:
     """
     Represents a complete kinetic model with reactions and reaction rates.
     Can provide reaction rates at specitic conditions. 
@@ -75,25 +74,34 @@ class KineticModel():
         # TODO : Implement thermionic emission and update with temperature.
         # Before that, temperature must be dynamic and not fixed.
         # The model should define the rates not defined by databases. Processes such as recombination, thermionic emission etc.
-        self.reactions_with_rates = self.reactions
+        self.reactions_with_rates = []
+        self.superelastics = []
 
         for i, r in enumerate(self.reactions):
-            self.reactions_with_rates[i] = r
-            if callable(r.rate_expression):
+            tmp_r = r
+
+            # If process is super-elastic, don't try to compute it using BOLOS for now.
+            # Process will not contribute to the EEDF (Beware, can be inaccurate !).
+            if r.is_superelastic:
+                self.superelastics.append(r)
+
+            elif callable(r.rate_expression):
                 # Lambda expression
-                self.reactions_with_rates[i].rate_expression = float(r.rate_expression())
+                tmp_r.rate_expression = float(r.rate_expression())
+                self.reactions_with_rates.append(tmp_r)
             elif isinstance(r.rate_expression, str):
                 # BOLOS expression
                 # Supprime le préfixe "BOLSIG " dans l'équation de la réaction si présent
-                self.reactions_with_rates[i].rate_expression = r.rate_expression.removeprefix("BOLSIG ")
-                # self.reactions_with_rates[i].rate_expression = self.solver.rate(self.eedf, r.rate_expression)
+                tmp_r.rate_expression = tmp_r.rate_expression.removeprefix("BOLSIG ")
+                tmp_r.rate_expression = self.solver.rate(self.eedf, tmp_r.rate_expression)
+                self.reactions_with_rates.append(tmp_r)
             else:
                 # Constant value
-                self.reactions_with_rates[i].rate_expression = float(r.rate_expression)
+                tmp_r.rate_expression = float(r.rate_expression)
+                self.reactions_with_rates.append(tmp_r)
 
-        # At this stage, all the reactions have their rate computed and stored in rates.
-        for proc in self.solver.iter_all():
-            print(proc)
+        for reaction in self.superelastics:
+            print(f"superelastic : {reaction}")
 
     def update_densities(self, electronic_only = False, update_densities = True):
         """
@@ -262,13 +270,13 @@ class AirKineticModel(KineticModel):
 
         for i in range(1, 9):
             self.reactions.append(Reaction(["e", "N2"], ["e", f"N2(v{i})"], f"BOLSIG N2 -> N2(v{i})"))
-            self.reactions.append(Reaction(["e", f"N2(v{i})"], ["e", "N2"], f"BOLSIG N2(v{i}) -> N2"))
+            self.reactions.append(Reaction(["e", f"N2(v{i})"], ["e", "N2"], f"BOLSIG N2(v{i}) -> N2", is_superelastic=True))
 
         self.reactions.append(Reaction(["e", "O2"], ["e", "O2(v1)"], "BOLSIG O2 -> O2(v1res)"))
 
         for i in range(1, 5):
             self.reactions.append(Reaction(["e", "O2"], ["e", f"O2(v{i})"], f"BOLSIG O2 -> O2(v{i})"))
-            self.reactions.append(Reaction(["e", f"O2(v{i})"], ["e", "O2"], f"BOLSIG O2(v{i}) -> O2"))
+            self.reactions.append(Reaction(["e", f"O2(v{i})"], ["e", "O2"], f"BOLSIG O2(v{i}) -> O2", is_superelastic=True))
 
             
         #--------------------------------------------------------------------------------
@@ -445,10 +453,10 @@ class AirKineticModel(KineticModel):
         #--------------------------------------------------------------------------------
 
         # N2 de-excitation
-        self.reactions.append(Reaction(["e", "N2(A3)"], ["e", "N2"], "BOLSIG N2(A3) -> N2"))
+        self.reactions.append(Reaction(["e", "N2(A3)"], ["e", "N2"], "BOLSIG N2(A3) -> N2", is_superelastic=True))
 
         # O2 de-excitation
-        self.reactions.append(Reaction(["e", "O2(a1)"], ["e", "O2"], "BOLSIG O2(a1) -> O2"))
+        self.reactions.append(Reaction(["e", "O2(a1)"], ["e", "O2"], "BOLSIG O2(a1) -> O2", is_superelastic=True))
 
 
         #--------------------------------------------------------------------------------
