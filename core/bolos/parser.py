@@ -83,7 +83,7 @@ def _read_block(fp, has_arg=True):
     comment = "\n".join(_read_until_sep(fp))
 
     logging.debug("Read process '%s'" % target)
-    data = np.loadtxt(_read_until_sep(fp)).tolist()
+    data = np.loadtxt(_read_until_sep(fp), comments="#").tolist()
 
     return target, arg, comment, data
 

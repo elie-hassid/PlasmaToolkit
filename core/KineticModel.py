@@ -297,8 +297,6 @@ class AirKineticModel(KineticModel):
         self.variables["kVT10_N2N2"] = lambda: (7.80e-12 * self.variables["Tgas"] * 
             np.exp(-218.0 / (self.variables["Tgas"])**(1/3) + 690.0 / self.variables["Tgas"]) /
             (1.0 - self.variables["QvibN2"]()))
-        
-
 
         self.variables["kVT10_N2N"] =  lambda: 4.00e-16 * (self.variables["Tgas"] / 300.0)**0.5
         self.variables["kVT10_N2O"] = lambda: 1.20e-13 * np.exp(-27.6 / self.variables["Tgas"])
@@ -414,8 +412,8 @@ class AirKineticModel(KineticModel):
         #--------------------------------------------------------------------------------
 
         # N2 electronic excitations
-        self.reactions.append(Reaction(["e", "N2"], ["e", "N2(A3)"], "BOLSIG N2 -> N2(A3)"))
-        for v in ["v5-9", "v10-"]:
+        # self.reactions.append(Reaction(["e", "N2"], ["e", "N2(A3)"], "BOLSIG N2 -> N2(A3)"))
+        for v in ["v0-4","v5-9", "v10-"]:
             self.reactions.append(Reaction(["e", "N2"], ["e", f"N2(A3,{v})"], f"BOLSIG N2 -> N2(A3,{v})"))
 
         self.reactions.append(Reaction(["e", "N2"], ["e", "N2(B3)"], "BOLSIG N2 -> N2(B3)"))
@@ -430,7 +428,7 @@ class AirKineticModel(KineticModel):
         for state in ["E3", "a''1"]:
             self.reactions.append(Reaction(["e", "N2"], ["e", f"N2({state})"], f"BOLSIG N2 -> N2({state})"))
 
-        self.reactions.append(Reaction(["e", "N2"], ["e", "N", "N(2D)"], "BOLSIG N2 -> N + N(2D)"))
+        self.reactions.append(Reaction(["e", "N2"], ["e", "N", "N(2D)"], "BOLSIG N2 -> N+N(13eV)")) # Couldn't find the N(2D) process.
 
         # O2 electronic excitations
         self.reactions.append(Reaction(["e", "O2"], ["e", "O2(a1)"], "BOLSIG O2 -> O2(a1)"))
