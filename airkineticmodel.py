@@ -1,3 +1,5 @@
+import numpy as np
+
 class Reaction:
     def __init__(self, reaction_string, rate_expression, is_superelastic = False):
         """
@@ -13,6 +15,8 @@ class Reaction:
         lhs, rhs = reaction_string.split("->")
         
         self.rate_expression = rate_expression
+        self.reaction_string = reaction_string
+        self.is_superelastic = is_superelastic
         self.reactants = [r.strip() for r in lhs.split("+")]
         self.products  = [p.strip() for p in rhs.split("+")]
     
@@ -52,34 +56,34 @@ class Air:
         # The states will be pooled to simplify the model (including v=0).
         # Important for energy transfer in low-temperature plasmas
         #-------------------------------------------------------------------
-        self.reactions.append(Reaction("e + N2 -> e + N2(v)"    , "BOLSIG N2 -> N2(v)"))
-        self.reactions.append(Reaction("e + N2(v) -> e + N2"    , "BOLSIG N2(v) -> N2", True))
-        self.reactions.append(Reaction("e + N2(v) -> e + N + N" , "BOLSIG N2(v) -> N + N"))
-        self.reactions.append(Reaction("e + O2 -> e + O2(v)"    , "BOLSIG O2 -> O2(v)"))
-        self.reactions.append(Reaction("e + O2(v) -> e + O2"    , "BOLSIG O2(v) -> O2", True))
-        self.reactions.append(Reaction("e + O2(v) -> e + O + O" , "BOLSIG O2(v) -> O + O"))
+        self.reactions.append(Reaction("e + N2 -> e + N2(v)"    , "N2 -> N2(v)"))
+        self.reactions.append(Reaction("e + N2(v) -> e + N2"    , "N2(v) -> N2", True))
+        # self.reactions.append(Reaction("e + N2(v) -> e + N + N" , "N2(v) -> N + N")) # Not yet implemented, cross section to be computed (Fridman-Macheret)
+        self.reactions.append(Reaction("e + O2 -> e + O2(v)"    , "O2 -> O2(v)"))
+        self.reactions.append(Reaction("e + O2(v) -> e + O2"    , "O2(v) -> O2", True))
+        # self.reactions.append(Reaction("e + O2(v) -> e + O + O" , "O2(v) -> O + O")) # Not yet implemented, cross section to be computed (Fridman-Macheret)
 
         #-------------------------------------------------------------------
         # Electronic excitation and dissociation (dominant pathways)
         #-------------------------------------------------------------------
-        self.reactions.append(Reaction("e + N2 -> e + N2*"      , "BOLSIG N2 -> N2*"))
-        self.reactions.append(Reaction("e + N2* -> e + N2"      , "BOLSIG N2* -> N2",True))
-        self.reactions.append(Reaction("e + N2* -> e + N + N"   , "BOLSIG N2* -> N + N"))
-        self.reactions.append(Reaction("e + O2 -> e + O2*"      , "BOLSIG O2 -> O2*"))
-        self.reactions.append(Reaction("e + O2* -> e + O2"      , "BOLSIG O2* -> O2", True))
-        self.reactions.append(Reaction("e + O2* -> e + O + O"   , "BOLSIG O2* -> O + O"))
+        self.reactions.append(Reaction("e + N2 -> e + N2*"      , "N2 -> N2*"))
+        self.reactions.append(Reaction("e + N2* -> e + N2"      , "N2* -> N2",True))
+        # self.reactions.append(Reaction("e + N2* -> e + N + N"   , "N2* -> N + N")) # Not yet implemented, cross section to be computed (Fridman-Macheret)
+        self.reactions.append(Reaction("e + O2 -> e + O2*"      , "O2 -> O2*"))
+        self.reactions.append(Reaction("e + O2* -> e + O2"      , "O2* -> O2", True))
+        # self.reactions.append(Reaction("e + O2* -> e + O + O"   , "O2* -> O + O")) # Not yet implemented, cross section to be computed
 
         #-------------------------------------------------------------------
         # Ionization by direct electron impact (+ is the split symbol => N2plus = N2^+)
         #-------------------------------------------------------------------
-        self.reactions.append(Reaction("e + N2 -> e + e + N2plus"      , "BOLSIG N2 -> N2^+"))
-        self.reactions.append(Reaction("e + O2 -> e + e + O2plus"      , "BOLSIG O2 -> O2^+"))
+        self.reactions.append(Reaction("e + N2 -> e + e + N2plus"      , "N2 -> N2^+"))
+        self.reactions.append(Reaction("e + O2 -> e + e + O2plus"      , "O2 -> O2^+"))
 
         #-------------------------------------------------------------------
         # Electron attachment (Only O2 is concerned here)
         #-------------------------------------------------------------------
-        self.reactions.append(Reaction("e + O2 -> O2minus"      , "BOLSIG O2 -> O2^-"))
-        self.reactions.append(Reaction("e + O2 -> Ominus + O"  , "BOLSIG O2 -> O^- + O"))
+        self.reactions.append(Reaction("e + O2 -> O2minus"      , "O2 -> O2^-"))
+        self.reactions.append(Reaction("e + O2 -> Ominus + O"  , "O2 -> O^- + O"))
 
         #-------------------------------------------------------------------
         # Section 2 : Processes with dynamic rate (Tgas, Te dependent)
@@ -106,7 +110,7 @@ class Air:
 if __name__ == "__main__":
     from core.bolos import solver, grid, parser
     air = Air()
-    boltz = solver.BoltzmannSolver(grid.LinearGrid(1e-6, 20., 100))
+    boltz = solver.BoltzmannSolver(grid.LinearGrid(0.01, 20., 100))
 
     # Load cross-sections.
     with open("pooled-cross-sections.txt") as fp:
@@ -117,15 +121,26 @@ if __name__ == "__main__":
 
     #Gas temperature (will not be constant but it is for now.)
     boltz.kT = 300 * solver.KB / solver.ELECTRONVOLT
-
-
     boltz.EN = 100 * solver.TOWNSEND
+
+    # Initial conditions
+    boltz.target['N2'].density = 0.80
+    boltz.target['O2'].density = 0.20
+
     boltz.init()
+
     # Iterative method => get a first guess using a Maxwellian distribution at 2eV.
-    fMaxwell = boltz.maxwell(2.0)
+    fMaxwell = boltz.maxwell(0.5)
+
     # Solve iteratively
-    eedf = boltz.converge(fMaxwell, maxn=100, rtol=1e-5)
+    eedf = boltz.converge(fMaxwell, maxn=200, rtol=1e-5)
+
     for reaction in air.reactions:
-        print(f"{reaction}")
+        rate = 0
+        if reaction.is_superelastic == False:
+            rate = boltz.rate(eedf, reaction.rate_expression)
+            print(f"{reaction} : {rate}")
+        else:
+            print(f"*superelastic* {reaction} : {rate}")
 
 
